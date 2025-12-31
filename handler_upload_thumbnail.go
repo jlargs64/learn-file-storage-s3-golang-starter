@@ -1,11 +1,13 @@
 package main
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -40,16 +42,9 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusInternalServerError, "could not set max memory when parsing thumbnail uploading", err)
 		return
 	}
-	rawImageData, _, err := r.FormFile("thumbnail")
-	mediaType := r.Header.Get("Content-Type")
+	rawImageData, fileHeader, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "could not get thumbnail from request", err)
-		return
-	}
-
-	imageBytes, err := io.ReadAll(rawImageData)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "could not read thumbnail image data into bytes", err)
 		return
 	}
 
@@ -64,7 +59,20 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	// Create new thumbnail
-	thumbnailURL := fmt.Sprintf("data:%v;base64,%v", mediaType, base64.StdEncoding.EncodeToString(imageBytes))
+	fileEnding := strings.Split(fileHeader.Header.Get("Content-Type"), "/")[1]
+	thumbnailFilePath := filepath.Join(cfg.assetsRoot, videoIDString+"."+fileEnding)
+	thumbnailFile, err := os.Create(thumbnailFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not save file to filesystem", err)
+		return
+	}
+	defer thumbnailFile.Close()
+	_, err = io.Copy(thumbnailFile, rawImageData)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not save file to filesystem", err)
+		return
+	}
+	thumbnailURL := fmt.Sprintf("http://localhost:%v/%v", cfg.port, thumbnailFilePath)
 	video.ThumbnailURL = &thumbnailURL
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
