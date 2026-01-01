@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,7 +60,17 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	// Create new thumbnail
-	fileEnding := strings.Split(fileHeader.Header.Get("Content-Type"), "/")[1]
+	contentType := fileHeader.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if mediaType != "image/jpeg" && mediaType != "image/png" {
+		respondWithError(w, http.StatusBadRequest, "unsupported file uploaded. only upload png or jpeg.", err)
+		return
+	}
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not parse mime type in thumbnail upload", err)
+		return
+	}
+	fileEnding := strings.Split(contentType, "/")[1]
 	thumbnailFilePath := filepath.Join(cfg.assetsRoot, videoIDString+"."+fileEnding)
 	thumbnailFile, err := os.Create(thumbnailFilePath)
 	if err != nil {
