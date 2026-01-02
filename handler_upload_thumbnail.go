@@ -72,7 +72,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	fileEnding := strings.Split(contentType, "/")[1]
-	var randomVideoID []byte
+	randomVideoID := make([]byte, 32)
 	_, err = rand.Read(randomVideoID)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "could not generate random video id", err)
