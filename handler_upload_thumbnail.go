@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -71,7 +72,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	fileEnding := strings.Split(contentType, "/")[1]
-	thumbnailFilePath := filepath.Join(cfg.assetsRoot, videoIDString+"."+fileEnding)
+	var randomVideoID []byte
+	_, err = rand.Read(randomVideoID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not generate random video id", err)
+		return
+	}
+
+	thumbnailFilePath := filepath.Join(cfg.assetsRoot, string(randomVideoID)+"."+fileEnding)
 	thumbnailFile, err := os.Create(thumbnailFilePath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "could not save file to filesystem", err)
