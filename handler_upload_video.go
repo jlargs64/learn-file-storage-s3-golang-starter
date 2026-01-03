@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -103,7 +107,22 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoKeyStringID := hex.EncodeToString(videoKeyID) + ".mp4"
+	// Get aspect ratio
+	ratio, err := getVideoAspectRatio(tempVideoFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "could not get aspect ratio of video", err)
+		return
+	}
+	var videoType string
+	if ratio == "16:9" {
+		videoType = "landscape"
+	} else if ratio == "9:16" {
+		videoType = "portrait"
+	} else {
+		videoType = "other"
+	}
+	// Upload to s3
+	videoKeyStringID := videoType + "/" + hex.EncodeToString(videoKeyID) + ".mp4"
 	s3UploadParams := &s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &videoKeyStringID,
@@ -122,4 +141,46 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "could not update video with new url", err)
 		return
 	}
+}
+
+type ffprobeOutput struct {
+	Streams []ffprobeStream `json:"streams"`
+}
+
+type ffprobeStream struct {
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+	DisplayRatio string `json:"display_aspect_ratio"`
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmd := exec.Command("ffprobe",
+		"-v",
+		"error",
+		"-print_format",
+		"json",
+		"-show_streams",
+		filePath,
+	)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		log.Println(string(stderr.String()))
+		return "", fmt.Errorf("could not get video aspect ratio with ffmpeg: %w", err)
+	}
+
+	var streams ffprobeOutput
+	err = json.Unmarshal(stdout.Bytes(), &streams)
+	if err != nil {
+		return "", fmt.Errorf("could not marshal ffprobe streams in video upload: %w", err)
+	}
+
+	stream := streams.Streams[0]
+	if stream.DisplayRatio == "16:9" || stream.DisplayRatio == "9:16" {
+		return stream.DisplayRatio, nil
+	}
+	return "other", nil
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -79,7 +80,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	thumbnailFilePath := filepath.Join(cfg.assetsRoot, string(randomVideoID)+"."+fileEnding)
+	thumbnailFilePath := filepath.Join(cfg.assetsRoot, hex.EncodeToString(randomVideoID)+"."+fileEnding)
 	thumbnailFile, err := os.Create(thumbnailFilePath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "could not save file to filesystem", err)
